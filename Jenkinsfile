@@ -132,6 +132,7 @@ pipeline {
                                 script: 'unset MAVEN_CONFIG && ./mvnw org.apache.maven.plugins:maven-help-plugin:3.2.0:evaluate -Dexpression=project.version -q -DforceStdout',
                                 returnStdout: true).trim()
                             env.PRESTO_PKG = "presto-server-${PRESTO_VERSION}.tar.gz"
+                            env.PRESTO_ROUTER_PKG = "presto-router-${PRESTO_VERSION}.tar.gz"
                             env.PRESTO_CLI_JAR = "presto-cli-${PRESTO_VERSION}-executable.jar"
                             env.PRESTO_BUILD_VERSION = env.PRESTO_VERSION + '-' +
                                 sh(script: "git show -s --format=%cd --date=format:'%Y%m%d%H%M%S'", returnStdout: true).trim() + "-" +
@@ -139,6 +140,7 @@ pipeline {
                             env.DOCKER_IMAGE = env.AWS_ECR + "/${IMG_NAME}:${PRESTO_BUILD_VERSION}"
                             env.NATIVE_DOCKER_IMAGE_DEPENDENCY = env.AWS_ECR + "/presto-native-dependency:${PRESTO_BUILD_VERSION}"
                             env.NATIVE_DOCKER_IMAGE = env.AWS_ECR + "/presto-native:${PRESTO_BUILD_VERSION}"
+                            env.DOCKER_ROUTER_IMAGE = env.AWS_ECR + "/presto-router:${PRESTO_BUILD_VERSION}"
                         }
                         sh 'printenv | sort'
 
@@ -162,6 +164,7 @@ pipeline {
                                 aws s3 cp index.txt ${AWS_S3_PREFIX}/${PRESTO_BUILD_VERSION}/ --no-progress
                                 aws s3 cp presto-server/target/${PRESTO_PKG}  ${AWS_S3_PREFIX}/${PRESTO_BUILD_VERSION}/ --no-progress
                                 aws s3 cp presto-cli/target/${PRESTO_CLI_JAR} ${AWS_S3_PREFIX}/${PRESTO_BUILD_VERSION}/ --no-progress
+                                aws s3 cp presto-router/target/${PRESTO_ROUTER_PKG}  ${AWS_S3_PREFIX}/${PRESTO_BUILD_VERSION}/ --no-progress
                             '''
                         }
                     }
@@ -296,6 +299,51 @@ pipeline {
                                     docker push "${AWS_ECR}/presto-native-dependency:latest"
                                 fi
                                 docker push "${NATIVE_DOCKER_IMAGE}"
+                            '''
+                        }
+                    }
+                }
+
+                stage('Docker Presto Router') {
+                    steps {
+                        echo 'build presto-router docker image'
+                        withCredentials([[
+                                $class:            'AmazonWebServicesCredentialsBinding',
+                                credentialsId:     "${AWS_CREDENTIAL_ID}",
+                                accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                            sh '''#!/bin/bash -ex
+                                cd presto-router/
+                                aws s3 cp ${AWS_S3_PREFIX}/${PRESTO_BUILD_VERSION}/${PRESTO_PKG}     . --no-progress
+                                aws s3 cp ${AWS_S3_PREFIX}/${PRESTO_BUILD_VERSION}/${PRESTO_ROUTER_PKG}     . --no-progress
+
+                                echo "Building ${DOCKER_ROUTER_IMAGE}"
+                                REG_ORG=${AWS_ECR} IMAGE_NAME='presto-router' TAG=${PRESTO_BUILD_VERSION} ./build.sh ${PRESTO_VERSION}
+                            '''
+                        }
+                    }
+                }
+
+                stage('Publish Docker Presto Router') {
+                    when {
+                        anyOf {
+                            expression { params.PUBLISH_ARTIFACTS_ON_CURRENT_BRANCH }
+                            branch "master"
+                        }
+                    }
+
+                    steps {
+                        echo 'Publish presto-router docker image'
+                        withCredentials([[
+                                $class:            'AmazonWebServicesCredentialsBinding',
+                                credentialsId:     "${AWS_CREDENTIAL_ID}",
+                                accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                            sh '''
+                                cd presto-router/
+                                aws s3 ls ${AWS_S3_PREFIX}/${PRESTO_BUILD_VERSION}/
+                                aws ecr-public get-login-password | docker login --username AWS --password-stdin ${AWS_ECR}
+                                PUBLISH=true REG_ORG=${AWS_ECR} IMAGE_NAME=${IMG_NAME} TAG=${PRESTO_BUILD_VERSION} ./build.sh ${PRESTO_VERSION}
                             '''
                         }
                     }
