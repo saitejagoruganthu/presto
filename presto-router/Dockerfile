@@ -30,6 +30,8 @@ RUN tar -xf /opt/presto-server-$PRESTO_VERSION.tar.gz -C /opt && \
 COPY etc /opt/presto/etc
 COPY entrypoint.sh /opt/presto/entrypoint.sh
 
+RUN chmod +x /opt/presto/entrypoint.sh
+
 RUN sh -c 'wget -P /opt/presto/lib https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/${JMX_PROMETHEUS_JAVAAGENT_VERSION}/jmx_prometheus_javaagent-${JMX_PROMETHEUS_JAVAAGENT_VERSION}.jar -q'
 
 ENTRYPOINT ["/opt/presto/entrypoint.sh"]
