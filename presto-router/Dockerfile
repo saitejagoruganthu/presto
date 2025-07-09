@@ -10,7 +10,7 @@ RUN dnf install -y java-11-openjdk wget tar gzip git jq make python3.11 python3-
     mkdir -p /usr/lib/jvm && \
     ln -s /usr/bin/python3 /usr/bin/python
 
-COPY PRESTO_ROUTER_PKG /opt/
+COPY $PRESTO_ROUTER_PKG /opt/
 
 RUN tar -xf /opt/presto-router-$PRESTO_VERSION.tar.gz -C /opt && \
     rm /opt/presto-router-$PRESTO_VERSION.tar.gz && \
@@ -18,7 +18,7 @@ RUN tar -xf /opt/presto-router-$PRESTO_VERSION.tar.gz -C /opt && \
     mkdir /opt/presto/plugin && \
     mkdir /opt/presto/etc
 
-COPY PRESTO_PKG /opt/
+COPY $PRESTO_PKG /opt/
 
 RUN tar -xf /opt/presto-server-$PRESTO_VERSION.tar.gz -C /opt && \
     rm /opt/presto-server-$PRESTO_VERSION.tar.gz && \
